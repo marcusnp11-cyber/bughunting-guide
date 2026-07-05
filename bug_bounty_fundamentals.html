@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="color-scheme" content="dark" />
+<title>Marcus Perez – Bug Bounty Fundamentals</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/lucide@latest" defer></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        base: '#050810',
+        'base-card': 'rgba(255,255,255,0.04)',
+        'base-card-hover': 'rgba(255,255,255,0.08)',
+        'base-nav': 'rgba(5,8,16,0.85)',
+        green: { 400: '#00ff88', 500: '#00e07a', 600: '#00c06a' },
+        cyan: { 400: '#00c8ff', 500: '#00a8dd' },
+        danger: { 400: '#ff4466', 500: '#dd3355' },
+        'high-orange': '#ff8800',
+        'med-yellow': '#ffcc00',
+        txt: { primary: '#e8eaf0', muted: '#7a8499', dim: '#4a5568' },
+      },
+      fontFamily: {
+        mono: ['JetBrains Mono', 'monospace'],
+        sans: ['Inter', 'sans-serif'],
+      },
+    },
+  },
+};
+</script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth;background:#050810}
+body{background:#050810;color:#e8eaf0;font-family:'Inter',sans-serif;overflow-x:hidden}
+::-webkit-scrollbar{width:8px}
+::-webkit-scrollbar-track{background:#0a0e1a}
+::-webkit-scrollbar-thumb{background:#00ff88;border-radius:4px}
+::-webkit-scrollbar-thumb:hover{background:#00e07a}
+@keyframes blink{0%,50%{opacity:1}51%,100%{opacity:0}}
+@keyframes scanline{0%{top:0}100%{top:100%}}
+@keyframes glow-pulse{0%,100%{box-shadow:0 0 8px rgba(0,255,136,0.3)}50%{box-shadow:0 0 20px rgba(0,255,136,0.6)}}
+@keyframes fadeInUp{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}
+@keyframes typing-cursor{0%,100%{border-right-color:#00ff88}50%{border-right-color:transparent}}
+@keyframes bar-fill{from{width:0}to{width:var(--bar-width)}}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+.cursor-blink{animation:blink 1s step-end infinite}
+.glow-border{border:1px solid rgba(0,255,136,0.2);box-shadow:0 0 12px rgba(0,255,136,0.08)}
+.glow-border-cyan{border:1px solid rgba(0,200,255,0.2);box-shadow:0 0 12px rgba(0,200,255,0.08)}
+.glow-border-red{border:1px solid rgba(255,68,102,0.2);box-shadow:0 0 12px rgba(255,68,102,0.08)}
+.glass-card{background:rgba(255,255,255,0.04);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.06);border-radius:16px}
+.glass-card:hover{background:rgba(255,255,255,0.07);border-color:rgba(0,255,136,0.25);box-shadow:0 0 20px rgba(0,255,136,0.08);transform:translateY(-3px)}
+.glass-card,.stat-card,.tool-card,.platform-badge,.jurisdiction-card{transition:all 0.35s cubic-bezier(0.4,0,0.2,1)}
+.stat-card{background:rgba(255,255,255,0.04);backdrop-filter:blur(8px);border:1px solid rgba(0,255,136,0.15);border-radius:12px;padding:1.5rem;text-align:center}
+.stat-card:hover{border-color:rgba(0,255,136,0.5);box-shadow:0 0 24px rgba(0,255,136,0.12)}
+.section-reveal{opacity:0;transform:translateY(30px);transition:opacity 0.7s ease,transform 0.7s ease}
+.section-reveal.visible{opacity:1;transform:translateY(0)}
+.nav-link{position:relative;padding:0.25rem 0}
+.nav-link::after{content:'';position:absolute;bottom:-2px;left:0;width:0;height:2px;background:#00ff88;transition:width 0.3s ease;box-shadow:0 0 6px rgba(0,255,136,0.4)}
+.nav-link:hover::after,.nav-link.active::after{width:100%}
+.terminal-window{background:#0d1117;border-radius:12px;border:1px solid rgba(255,255,255,0.08);overflow:hidden;font-family:'JetBrains Mono',monospace}
+.terminal-chrome{background:#161b22;padding:12px 16px;display:flex;align-items:center;gap:8px}
+.terminal-dot{width:12px;height:12px;border-radius:50%}
+.terminal-input{background:transparent;border:none;color:#00ff88;font-family:'JetBrains Mono',monospace;font-size:14px;outline:none;flex:1;caret-color:#00ff88}
+.bar-animated{animation:bar-fill 1.2s ease-out forwards}
+.chapter-badge{animation:glow-pulse 3s ease-in-out infinite}
+.hero-canvas{position:absolute;top:0;left:0;width:100%;height:100%;z-index:0}
+.platform-badge{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:999px;padding:8px 20px;font-size:0.85rem;font-weight:500;cursor:default;display:inline-flex;align-items:center;gap:6px}
+.platform-badge:hover{background:rgba(255,255,255,0.1);border-color:rgba(0,255,136,0.3)}
+.platform-badge.public{border-color:rgba(0,255,136,0.2);color:#00ff88}
+.platform-badge.private{border-color:rgba(0,200,255,0.2);color:#00c8ff}
+.platform-badge.specialized{border-color:rgba(255,68,102,0.2);color:#ff4466}
+.jurisdiction-card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.06);border-radius:16px;padding:1.5rem}
+.jurisdiction-card:hover{border-color:rgba(0,200,255,0.25);box-shadow:0 0 16px rgba(0,200,255,0.06)}
+.tool-card{background:rgba(255,255,255,0.04);backdrop-filter:blur(8px);border-radius:16px;padding:2rem;transition:all 0.35s ease}
+.tool-card:hover{transform:translateY(-4px)}
+.tool-card.green-accent{border:1px solid rgba(0,255,136,0.15)}
+.tool-card.green-accent:hover{border-color:rgba(0,255,136,0.4);box-shadow:0 0 30px rgba(0,255,136,0.1)}
+.tool-card.cyan-accent{border:1px solid rgba(0,200,255,0.15)}
+.tool-card.cyan-accent:hover{border-color:rgba(0,200,255,0.4);box-shadow:0 0 30px rgba(0,200,255,0.1)}
+.tool-card.red-accent{border:1px solid rgba(255,68,102,0.15)}
+.tool-card.red-accent:hover{border-color:rgba(255,68,102,0.4);box-shadow:0 0 30px rgba(255,68,102,0.1)}
+.feature-tag{font-size:0.7rem;padding:4px 10px;border-radius:999px;font-family:'JetBrains Mono',monospace;font-weight:500;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1)}
+</style>
+</head>
+<body data-id="0" class="min-h-screen">
+<app-icon data-id="1" hidden data-icon="shield" data-palette="Dark"></app-icon>
+
+<!-- NAVIGATION -->
+<nav data-id="2" id="navbar-x9k2" class="fixed top-0 left-0 right-0 z-50" style="background:rgba(5,8,16,0.85);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-bottom:1px solid rgba(0,255,136,0.1);box-shadow:0 0 20px rgba(0,255,136,0.03)">
+  <div data-id="3" class="max-w-7xl mx-auto px-4 md:px-6 py-3 flex items-center justify-between">
+    <a data-id="4" href="#hero" class="flex items-center gap-2 font-mono font-bold text-lg tracking-wider" style="color:#e8eaf0">
+      <span data-id="5">MNP</span>
+      <span data-id="6" class="inline-block w-2 h-2 rounded-full" style="background:#00ff88;box-shadow:0 0 8px #00ff88"></span>
+    </a>
+    <div data-id="7" class="hidden md:flex items-center gap-6">
+      <a data-id="8" href="#about" class="nav-link text-sm font-medium" style="color:#7a8499" data-nav="about">About</a>
+      <a data-id="9" href="#chapters" class="nav-link text-sm font-medium" style="color:#7a8499" data-nav="chapters">Chapters</a>
+      <a data-id="10" href="#tools" class="nav-link text-sm font-medium" style="color:#7a8499" data-nav="tools">Tools</a>
+      <a data-id="11" href="#terminal" class="nav-link text-sm font-medium" style="color:#7a8499" data-nav="terminal">Terminal</a>
+      <a data-id="12" href="#cta" class="text-sm font-semibold px-4 py-2 rounded-lg" style="background:#00ff88;color:#050810">Get Book</a>
+    </div>
+    <button data-id="13" id="mobile-menu-btn-a3f1" class="md:hidden p-2" style="color:#e8eaf0" aria-label="Open menu">
+      <i data-id="14" data-lucide="menu" class="w-6 h-6"></i>
+    </button>
+  </div>
+</nav>
+
+<!-- MOBILE MENU -->
+<div data-id="15" id="mobile-menu-r4t7" class="hidden fixed inset-0 z-[60] flex flex-col" style="background:rgba(5,8,16,0.97);backdrop-filter:blur(20px)">
+  <div data-id="16" class="flex items-center justify-between px-4 py-3" style="border-bottom:1px solid rgba(0,255,136,0.1)">
+    <span data-id="17" class="font-mono font-bold text-lg tracking-wider" style="color:#e8eaf0">MNP<span data-id="18" class="inline-block w-2 h-2 rounded-full ml-2" style="background:#00ff88;box-shadow:0 0 8px #00ff88"></span></span>
+    <button data-id="19" id="mobile-menu-close-b2c8" class="p-2" style="color:#e8eaf0" aria-label="Close menu">
+      <i data-id="20" data-lucide="x" class="w-6 h-6"></i>
+    </button>
+  </div>
+  <div data-id="21" class="flex flex-col items-center justify-center flex-1 gap-6">
+    <a data-id="22" href="#about" class="mobile-nav-link text-lg font-medium" style="color:#7a8499">About</a>
+    <a data-id="23" href="#chapters" class="mobile-nav-link text-lg font-medium" style="color:#7a8499">Chapters</a>
+    <a data-id="24" href="#tools" class="mobile-nav-link text-lg font-medium" style="color:#7a8499">Tools</a>
+    <a data-id="25" href="#terminal" class="mobile-nav-link text-lg font-medium" style="color:#7a8499">Terminal</a>
+    <a data-id="26" href="#cta" class="text-base font-semibold px-6 py-3 rounded-lg mt-2" style="background:#00ff88;color:#050810">Get Book</a>
+  </div>
+</div>
+
+<!-- HERO SECTION -->
+<section data-id="27" id="hero" class="relative min-h-screen flex flex-col items-center justify-center px-4 overflow-hidden">
+  <canvas data-id="28" id="hero-canvas-p1q9" class="hero-canvas"></canvas>
+  <!-- Scan line -->
+  <div data-id="29" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:hidden;z-index:1">
+    <div data-id="30" id="scanline-m3n7" style="position:absolute;left:0;width:100%;height:2px;background:linear-gradient(90deg,transparent,rgba(0,255,136,0.15),transparent);animation:scanline 8s linear infinite"></div>
+  </div>
+  <div data-id="31" class="relative z-10 text-center max-w-5xl mx-auto">
+    <p data-id="32" id="hero-pre-h4j2" class="font-mono text-sm md:text-base mb-4 tracking-widest uppercase" style="color:#7a8499">The Guide to the Fundamentals of</p>
+    <h1 data-id="33" id="hero-title-k9w3" class="text-4xl sm:text-5xl md:text-7xl lg:text-8xl font-black tracking-tight leading-none mb-6" style="color:#00ff88;text-shadow:0 0 40px rgba(0,255,136,0.3),0 0 80px rgba(0,255,136,0.1)">
+      BUG BOUNTY<br data-id="34">HUNTING<span data-id="35" class="cursor-blink" style="color:#00ff88">_</span>
+    </h1>
+    <p data-id="36" id="hero-sub-n2l5" class="font-mono text-sm md:text-base mb-10 tracking-wide" style="color:#7a8499">
+      First Edition · May 2026 · By Marcus Perez
+    </p>
+    <div data-id="37" class="flex flex-col sm:flex-row items-center justify-center gap-4">
+      <a data-id="38" href="#chapters" id="cta-explore-c8d4" class="px-6 py-3 rounded-lg font-semibold text-sm flex items-center gap-2 min-h-[44px]" style="background:#00ff88;color:#050810">
+        Explore Chapters <i data-id="39" data-lucide="arrow-right" class="w-4 h-4"></i>
+      </a>
+      <a data-id="40" href="#terminal" id="cta-terminal-e5f7" class="px-6 py-3 rounded-lg font-semibold text-sm flex items-center gap-2 min-h-[44px]" style="border:1px solid rgba(0,200,255,0.4);color:#00c8ff;background:transparent">
+        Launch Terminal <i data-id="41" data-lucide="arrow-down" class="w-4 h-4"></i>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ABOUT SECTION -->
+<section data-id="42" id="about" class="section-reveal py-20 md:py-28 px-4 md:px-6 max-w-7xl mx-auto">
+  <div data-id="43" class="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-16 items-start">
+    <!-- Stats Grid -->
+    <div data-id="44" class="grid grid-cols-2 gap-4">
+      <div data-id="45" class="stat-card">
+        <p data-id="46" class="text-3xl md:text-4xl font-black font-mono" style="color:#00ff88">14</p>
+        <p data-id="47" class="text-xs font-mono uppercase tracking-widest mt-2" style="color:#7a8499">Chapters</p>
+      </div>
+      <div data-id="48" class="stat-card">
+        <p data-id="49" class="text-3xl md:text-4xl font-black font-mono" style="color:#00c8ff">600+</p>
+        <p data-id="50" class="text-xs font-mono uppercase tracking-widest mt-2" style="color:#7a8499">Tools Covered</p>
+      </div>
+      <div data-id="51" class="stat-card">
+        <p data-id="52" class="text-3xl md:text-4xl font-black font-mono" style="color:#ffcc00">1995</p>
+        <p data-id="53" class="text-xs font-mono uppercase tracking-widest mt-2" style="color:#7a8499">Bug Bounty Origin Year</p>
+      </div>
+      <div data-id="54" class="stat-card">
+        <p data-id="55" class="text-3xl md:text-4xl font-black font-mono" style="color:#ff4466">$7,200</p>
+        <p data-id="56" class="text-xs font-mono uppercase tracking-widest mt-2" style="color:#7a8499">Avg Critical Payout</p>
+      </div>
+    </div>
+    <!-- About Text -->
+    <div data-id="57">
+      <div data-id="58" class="mb-6" style="border-top:3px solid #00ff88;width:48px"></div>
+      <h2 data-id="59" id="about-title-g7h3" class="text-2xl md:text-3xl font-bold mb-6" style="color:#e8eaf0">ABOUT THE BOOK</h2>
+      <p data-id="60" class="text-base leading-relaxed mb-4" style="color:#b0b8c8">
+        Bug bounty programs are structured security initiatives that reward independent researchers for responsibly identifying vulnerabilities in real-world systems. Over the past three decades, these programs have fundamentally reshaped how organizations collaborate with external security talent to improve software resilience at scale.
+      </p>
+      <p data-id="61" class="text-base leading-relaxed mb-8" style="color:#b0b8c8">
+        From Netscape's 1995 initiative to the U.S. Department of Defense's "Hack the Pentagon" in 2016, this guide traces the full evolution — and equips you to participate effectively.
+      </p>
+      <!-- Author Badge -->
+      <div data-id="62" class="flex items-center gap-4 p-4 rounded-xl" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.06)">
+        <div data-id="63" class="w-12 h-12 rounded-full flex items-center justify-center font-bold font-mono text-sm" style="background:#00ff88;color:#050810">MP</div>
+        <div data-id="64">
+          <p data-id="65" class="font-semibold text-sm" style="color:#e8eaf0">Marcus Perez</p>
+          <p data-id="66" class="text-xs font-mono" style="color:#7a8499">Cybersecurity Researcher & Author</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CHAPTERS SECTION -->
+<section data-id="67" id="chapters" class="section-reveal py-20 md:py-28 px-4 md:px-6 max-w-7xl mx-auto">
+  <div data-id="68" class="text-center mb-12">
+    <p data-id="69" class="font-mono text-xs uppercase tracking-[0.2em] mb-3" style="color:#00ff88">// Table of Contents</p>
+    <h2 data-id="70" id="chapters-title-f4g6" class="text-2xl md:text-3xl font-bold" style="color:#e8eaf0">ALL 14 CHAPTERS</h2>
+  </div>
+  <div data-id="71" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" id="chapters-grid-w2x5">
+    <!-- Chapter cards inserted by JS -->
+  </div>
+</section>
+
+<!-- TOOLS SECTION -->
+<section data-id="72" id="tools" class="section-reveal py-20 md:py-28 px-4 md:px-6 max-w-7xl mx-auto">
+  <div data-id="73" class="text-center mb-12">
+    <p data-id="74" class="font-mono text-xs uppercase tracking-[0.2em] mb-3" style="color:#00c8ff">// Arsenal</p>
+    <h2 data-id="75" id="tools-title-t5u8" class="text-2xl md:text-3xl font-bold" style="color:#e8eaf0">CORE TOOLKIT</h2>
+    <div data-id="76" class="mx-auto mt-3 h-0.5 w-24 rounded-full" style="background:linear-gradient(90deg,transparent,#00c8ff,transparent)"></div>
+  </div>
+  <div data-id="77" class="grid grid-cols-1 md:grid-cols-3 gap-6">
+    <!-- Kali Linux -->
+    <div data-id="78" class="tool-card green-accent">
+      <div data-id="79" class="flex items-center gap-3 mb-4">
+        <i data-id="80" data-lucide="terminal" class="w-6 h-6" style="color:#00ff88"></i>
+        <h3 data-id="81" class="font-bold text-lg" style="color:#00ff88">Kali Linux</h3>
+      </div>
+      <p data-id="82" class="text-sm leading-relaxed mb-5" style="color:#b0b8c8">Debian-based, open-source OS with 600+ pre-installed security tools. The de facto standard for ethical hackers worldwide.</p>
+      <div data-id="83" class="flex flex-wrap gap-2">
+        <span data-id="84" class="feature-tag" style="color:#00ff88;border-color:rgba(0,255,136,0.2)">600+ Tools</span>
+        <span data-id="85" class="feature-tag" style="color:#00ff88;border-color:rgba(0,255,136,0.2)">Multi-Platform</span>
+        <span data-id="86" class="feature-tag" style="color:#00ff88;border-color:rgba(0,255,136,0.2)">Rolling Release</span>
+        <span data-id="87" class="feature-tag" style="color:#00ff88;border-color:rgba(0,255,136,0.2)">NetHunter Mobile</span>
+      </div>
+    </div>
+    <!-- Burp Suite -->
+    <div data-id="88" class="tool-card cyan-accent">
+      <div data-id="89" class="flex items-center gap-3 mb-4">
+        <i data-id="90" data-lucide="radar" class="w-6 h-6" style="color:#00c8ff"></i>
+        <h3 data-id="91" class="font-bold text-lg" style="color:#00c8ff">Burp Suite</h3>
+      </div>
+      <p data-id="92" class="text-sm leading-relaxed mb-5" style="color:#b0b8c8">Industry-leading web application security testing platform used by 47,000+ organizations. Available in Community, Professional, and Enterprise editions.</p>
+      <div data-id="93" class="flex flex-wrap gap-2">
+        <span data-id="94" class="feature-tag" style="color:#00c8ff;border-color:rgba(0,200,255,0.2)">Intercepting Proxy</span>
+        <span data-id="95" class="feature-tag" style="color:#00c8ff;border-color:rgba(0,200,255,0.2)">Active Scanner</span>
+        <span data-id="96" class="feature-tag" style="color:#00c8ff;border-color:rgba(0,200,255,0.2)">BApp Store</span>
+        <span data-id="97" class="feature-tag" style="color:#00c8ff;border-color:rgba(0,200,255,0.2)">CI/CD Integration</span>
+      </div>
+    </div>
+    <!-- Nmap -->
+    <div data-id="98" class="tool-card red-accent">
+      <div data-id="99" class="flex items-center gap-3 mb-4">
+        <i data-id="100" data-lucide="scan" class="w-6 h-6" style="color:#ff4466"></i>
+        <h3 data-id="101" class="font-bold text-lg" style="color:#ff4466">Nmap</h3>
+      </div>
+      <p data-id="102" class="text-sm leading-relaxed mb-5" style="color:#b0b8c8">Network discovery and port scanning. The foundational reconnaissance tool for mapping attack surfaces and identifying open services.</p>
+      <div data-id="103" class="flex flex-wrap gap-2">
+        <span data-id="104" class="feature-tag" style="color:#ff4466;border-color:rgba(255,68,102,0.2)">Port Scanning</span>
+        <span data-id="105" class="feature-tag" style="color:#ff4466;border-color:rgba(255,68,102,0.2)">OS Detection</span>
+        <span data-id="106" class="feature-tag" style="color:#ff4466;border-color:rgba(255,68,102,0.2)">Script Engine</span>
+        <span data-id="107" class="feature-tag" style="color:#ff4466;border-color:rgba(255,68,102,0.2)">Service Fingerprint</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- TERMINAL SECTION -->
+<section data-id="108" id="terminal" class="section-reveal py-20 md:py-28 px-4 md:px-6 max-w-7xl mx-auto">
+  <div data-id="109" class="text-center mb-10">
+    <p data-id="110" class="font-mono text-xs uppercase tracking-[0.2em] mb-3" style="color:#00ff88">// Interactive</p>
+    <h2 data-id="111" id="terminal-title-q8r1" class="text-2xl md:text-3xl font-bold inline-flex items-center gap-2" style="color:#e8eaf0">
+      INTERACTIVE TERMINAL <span data-id="112" class="w-2.5 h-5 cursor-blink" style="background:#00ff88;display:inline-block"></span>
+    </h2>
+  </div>
+  <div data-id="113" class="terminal-window max-w-4xl mx-auto" style="box-shadow:0 0 40px rgba(0,0,0,0.5)">
+    <div data-id="114" class="terminal-chrome">
+      <div data-id="115" class="terminal-dot" style="background:#ff5f57"></div>
+      <div data-id="116" class="terminal-dot" style="background:#ffbd2e"></div>
+      <div data-id="117" class="terminal-dot" style="background:#28ca42"></div>
+      <span data-id="118" class="ml-3 text-xs font-mono" style="color:#7a8499">marcus@bugbounty:~$</span>
+    </div>
+    <div data-id="119" id="terminal-output-v6w2" class="p-4 md:p-6 font-mono text-xs md:text-sm leading-relaxed overflow-y-auto" style="min-height:340px;max-height:520px">
+    </div>
+    <div data-id="120" id="terminal-input-area-z3a5" class="hidden px-4 md:px-6 pb-4 md:pb-6 flex items-center gap-2">
+      <span data-id="121" class="font-mono text-xs md:text-sm" style="color:#00ff88">marcus@bugbounty:~$</span>
+      <input data-id="122" type="text" id="terminal-input-d7e9" class="terminal-input text-xs md:text-sm flex-1" placeholder="Type a command..." autocomplete="off" />
+    </div>
+  </div>
+</section>
+
+<!-- BOUNTY PAYOUT SECTION -->
+<section data-id="123" id="payouts" class="section-reveal py-20 md:py-28 px-4 md:px-6 max-w-5xl mx-auto">
+  <div data-id="124" class="text-center mb-12">
+    <p data-id="125" class="font-mono text-xs uppercase tracking-[0.2em] mb-3" style="color:#ff4466">// Rewards</p>
+    <h2 data-id="126" id="payouts-title-s1t4" class="text-2xl md:text-3xl font-bold" style="color:#e8eaf0">BOUNTY PAYOUT TIERS</h2>
+  </div>
+  <div data-id="127" class="space-y-6" id="bars-container-j5k8">
+    <div data-id="128" class="bar-row" data-severity="critical" data-amount="7200" data-max="7200">
+      <div data-id="129" class="flex items-center justify-between mb-2">
+        <span data-id="130" class="font-mono text-sm font-bold" style="color:#ff4466">CRITICAL</span>
+        <span data-id="131" class="font-mono text-sm font-bold" style="color:#ff4466">$7,200 avg</span>
+      </div>
+      <div data-id="132" class="h-4 rounded-full overflow-hidden" style="background:rgba(255,255,255,0.06)">
+        <div data-id="133" class="h-full rounded-full" style="background:#ff4466;width:0;--bar-width:100%"></div>
+      </div>
+    </div>
+    <div data-id="134" class="bar-row" data-severity="high" data-amount="3000" data-max="7200">
+      <div data-id="135" class="flex items-center justify-between mb-2">
+        <span data-id="136" class="font-mono text-sm font-bold" style="color:#ff8800">HIGH</span>
+        <span data-id="137" class="font-mono text-sm font-bold" style="color:#ff8800">$3,000 avg</span>
+      </div>
+      <div data-id="138" class="h-4 rounded-full overflow-hidden" style="background:rgba(255,255,255,0.06)">
+        <div data-id="139" class="h-full rounded-full" style="background:#ff8800;width:0;--bar-width:41.7%"></div>
+      </div>
+    </div>
+    <div data-id="140" class="bar-row" data-severity="medium" data-amount="1100" data-max="7200">
+      <div data-id="141" class="flex items-center justify-between mb-2">
+        <span data-id="142" class="font-mono text-sm font-bold" style="color:#ffcc00">MEDIUM</span>
+        <span data-id="143" class="font-mono text-sm font-bold" style="color:#ffcc00">$1,100 avg</span>
+      </div>
+      <div data-id="144" class="h-4 rounded-full overflow-hidden" style="background:rgba(255,255,255,0.06)">
+        <div data-id="145" class="h-full rounded-full" style="background:#ffcc00;width:0;--bar-width:15.3%"></div>
+      </div>
+    </div>
+    <div data-id="146" class="bar-row" data-severity="low" data-amount="250" data-max="7200">
+      <div data-id="147" class="flex items-center justify-between mb-2">
+        <span data-id="148" class="font-mono text-sm font-bold" style="color:#00ff88">LOW</span>
+        <span data-id="149" class="font-mono text-sm font-bold" style="color:#00ff88">$250 avg</span>
+      </div>
+      <div data-id="150" class="h-4 rounded-full overflow-hidden" style="background:rgba(255,255,255,0.06)">
+        <div data-id="151" class="h-full rounded-full" style="background:#00ff88;width:0;--bar-width:3.5%"></div>
+      </div>
+    </div>
+  </div>
+  <div data-id="152" class="mt-8 p-4 rounded-xl font-mono text-xs" style="background:rgba(0,200,255,0.06);border:1px solid rgba(0,200,255,0.15);color:#00c8ff">
+    <i data-id="153" data-lucide="info" class="w-4 h-4 inline-block mr-1" style="vertical-align:middle"></i>
+    Blockchain and IT critical-severity payouts frequently exceed $13,000, with select programs offering rewards beyond $50,000.
+  </div>
+</section>
+
+<!-- PLATFORMS SECTION -->
+<section data-id="154" id="platforms" class="section-reveal py-20 md:py-28 px-4 md:px-6 max-w-6xl mx-auto">
+  <div data-id="155" class="text-center mb-12">
+    <p data-id="156" class="font-mono text-xs uppercase tracking-[0.2em] mb-3" style="color:#00c8ff">// Ecosystem</p>
+    <h2 data-id="157" id="platforms-title-u2v5" class="text-2xl md:text-3xl font-bold" style="color:#e8eaf0">BUG BOUNTY PLATFORMS</h2>
+  </div>
+  <div data-id="158" class="flex flex-wrap justify-center gap-3" id="platforms-grid-y8z1">
+    <span data-id="159" class="platform-badge public"><span data-id="160" class="w-2 h-2 rounded-full" style="background:#00ff88"></span>HackerOne</span>
+    <span data-id="161" class="platform-badge public"><span data-id="162" class="w-2 h-2 rounded-full" style="background:#00ff88"></span>Bugcrowd</span>
+    <span data-id="163" class="platform-badge public"><span data-id="164" class="w-2 h-2 rounded-full" style="background:#00ff88"></span>Intigriti</span>
+    <span data-id="165" class="platform-badge public"><span data-id="166" class="w-2 h-2 rounded-full" style="background:#00ff88"></span>YesWeHack</span>
+    <span data-id="167" class="platform-badge private"><span data-id="168" class="w-2 h-2 rounded-full" style="background:#00c8ff"></span>Synack</span>
+    <span data-id="169" class="platform-badge specialized"><span data-id="170" class="w-2 h-2 rounded-full" style="background:#ff4466"></span>Immunefi</span>
+    <span data-id="171" class="platform-badge public"><span data-id="172" class="w-2 h-2 rounded-full" style="background:#00ff88"></span>Open Bug Bounty</span>
+    <span data-id="173" class="platform-badge specialized"><span data-id="174" class="w-2 h-2 rounded-full" style="background:#ff4466"></span>HackenProof</span>
+    <span data-id="175" class="platform-badge specialized"><span data-id="176" class="w-2 h-2 rounded-full" style="background:#ff4466"></span>Zero Day Initiative</span>
+    <span data-id="177" class="platform-badge private"><span data-id="178" class="w-2 h-2 rounded-full" style="background:#00c8ff"></span>Cobalt</span>
+    <span data-id="179" class="platform-badge private"><span data-id="180" class="w-2 h-2 rounded-full" style="background:#00c8ff"></span>Detectify</span>
+    <span data-id="181" class="platform-badge public"><span data-id="182" class="w-2 h-2 rounded-full" style="background:#00ff88"></span>SafeHats</span>
+  </div>
+  <div data-id="183" class="flex justify-center gap-6 mt-6 text-xs font-mono" style="color:#7a8499">
+    <span data-id="184" class="flex items-center gap-1.5"><span data-id="185" class="w-2 h-2 rounded-full" style="background:#00ff88"></span> Public</span>
+    <span data-id="186" class="flex items-center gap-1.5"><span data-id="187" class="w-2 h-2 rounded-full" style="background:#00c8ff"></span> Private</span>
+    <span data-id="188" class="flex items-center gap-1.5"><span data-id="189" class="w-2 h-2 rounded-full" style="background:#ff4466"></span> Specialized</span>
+  </div>
+</section>
+
+<!-- LEGAL SECTION -->
+<section data-id="190" id="legal" class="section-reveal py-20 md:py-28 px-4 md:px-6 max-w-7xl mx-auto">
+  <div data-id="191" class="text-center mb-12">
+    <p data-id="192" class="font-mono text-xs uppercase tracking-[0.2em] mb-3" style="color:#ffcc00">// Compliance</p>
+    <h2 data-id="193" id="legal-title-a4b7" class="text-2xl md:text-3xl font-bold" style="color:#e8eaf0">LEGAL LANDSCAPE</h2>
+  </div>
+  <div data-id="194" class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+    <div data-id="195" class="jurisdiction-card">
+      <div data-id="196" class="text-2xl mb-3">🇺🇸</div>
+      <h3 data-id="197" class="font-bold text-base mb-2" style="color:#e8eaf0">United States</h3>
+      <div data-id="198" class="flex flex-wrap gap-2 mb-3">
+        <span data-id="199" class="font-mono text-xs px-2 py-1 rounded" style="background:rgba(255,68,102,0.1);color:#ff4466">CFAA</span>
+        <span data-id="200" class="font-mono text-xs px-2 py-1 rounded" style="background:rgba(255,68,102,0.1);color:#ff4466">DMCA</span>
+        <span data-id="201" class="font-mono text-xs px-2 py-1 rounded" style="background:rgba(255,68,102,0.1);color:#ff4466">GLBA</span>
+        <span data-id="202" class="font-mono text-xs px-2 py-1 rounded" style="background:rgba(255,68,102,0.1);color:#ff4466">HIPAA</span>
+      </div>
+      <p data-id="203" class="text-xs leading-relaxed" style="color:#7a8499">Federal and state statutes governing unauthorized access, safe harbor protections, and data privacy.</p>
+    </div>
+    <div data-id="204" class="jurisdiction-card">
+      <div data-id="205" class="text-2xl mb-3">🇪🇺</div>
+      <h3 data-id="206" class="font-bold text-base mb-2" style="color:#e8eaf0">European Union</h3>
+      <div data-id="207" class="flex flex-wrap gap-2 mb-3">
+        <span data-id="208" class="font-mono text-xs px-2 py-1 rounded" style="background:rgba(0,200,255,0.1);color:#00c8ff">GDPR</span>
+      </div>
+      <p data-id="209" class="text-xs leading-relaxed" style="color:#7a8499">Data minimization, purpose limitation, and right to erasure. Strict consent and data processing requirements for researchers.</p>
+    </div>
+    <div data-id="210" class="jurisdiction-card">
+      <div data-id="211" class="text-2xl mb-3">🌐</div>
+      <h3 data-id="212" class="font-bold text-base mb-2" style="color:#e8eaf0">International</h3>
+      <div data-id="213" class="flex flex-wrap gap-2 mb-3">
+        <span data-id="214" class="font-mono text-xs px-2 py-1 rounded" style="background:rgba(0,255,136,0.1);color:#00ff88">CMA (UK)</span>
+        <span data-id="215" class="font-mono text-xs px-2 py-1 rounded" style="background:rgba(0,255,136,0.1);color:#00ff88">Criminal Code (CA)</span>
+      </div>
+      <p data-id="216" class="text-xs leading-relaxed" style="color:#7a8499">Computer Misuse Act (UK), Canadian Criminal Code, and other jurisdiction-specific frameworks.</p>
+    </div>
+  </div>
+  <div data-id="217" class="max-w-3xl mx-auto p-5 rounded-xl" style="background:rgba(255,204,0,0.05);border-left:3px solid #ffcc00">
+    <p data-id="218" class="text-sm italic leading-relaxed" style="color:#b0b8c8">
+      "In 2022, the Department of Justice revised its policy to provide more explicit direction about good-faith security research."
+    </p>
+    <p data-id="219" class="text-xs font-mono mt-2" style="color:#7a8499">— U.S. Department of Justice, CFAA Policy Revision</p>
+  </div>
+</section>
+
+<!-- CTA / FOOTER -->
+<section data-id="220" id="cta" class="section-reveal py-20 md:py-28 px-4 md:px-6 text-center">
+  <div data-id="221" class="max-w-3xl mx-auto">
+    <div data-id="222" class="inline-block mb-6 px-4 py-1.5 rounded-full font-mono text-xs" style="background:rgba(0,255,136,0.1);color:#00ff88;border:1px solid rgba(0,255,136,0.15)">
+      <i data-id="223" data-lucide="rocket" class="w-3 h-3 inline mr-1" style="vertical-align:middle"></i> Available May 2026
+    </div>
+    <h2 data-id="224" id="cta-title-i6j9" class="text-3xl md:text-4xl lg:text-5xl font-black mb-4" style="color:#e8eaf0">START YOUR BUG BOUNTY<br data-id="225"><span data-id="226" style="color:#00ff88">JOURNEY</span></h2>
+    <p data-id="227" class="text-base md:text-lg mb-8 max-w-xl mx-auto" style="color:#7a8499">
+      Master scope, reporting, legal fundamentals, and professional tools in one comprehensive guide.
+    </p>
+    <a data-id="228" href="#hero" class="inline-flex items-center gap-2 px-8 py-4 rounded-lg font-bold text-base min-h-[44px]" style="background:#00ff88;color:#050810;box-shadow:0 0 30px rgba(0,255,136,0.25)">
+      <i data-id="229" data-lucide="book-open" class="w-5 h-5"></i> Get the Book
+    </a>
+  </div>
+</section>
+
+<footer data-id="230" id="footer-l3m6" class="py-8 px-4 md:px-6 text-center" style="border-top:1px solid rgba(255,255,255,0.06)">
+  <div data-id="231" class="max-w-7xl mx-auto">
+    <div data-id="232" class="flex flex-wrap justify-center gap-6 mb-6">
+      <a data-id="233" href="#about" class="text-xs font-mono hover:opacity-100 transition-opacity" style="color:#7a8499">About</a>
+      <a data-id="234" href="#chapters" class="text-xs font-mono hover:opacity-100 transition-opacity" style="color:#7a8499">Chapters</a>
+      <a data-id="235" href="#tools" class="text-xs font-mono hover:opacity-100 transition-opacity" style="color:#7a8499">Tools</a>
+      <a data-id="236" href="#terminal" class="text-xs font-mono hover:opacity-100 transition-opacity" style="color:#7a8499">Terminal</a>
+    </div>
+    <p data-id="237" class="text-xs font-mono mb-2" style="color:#4a5568">© 2026 Marcus Perez. All rights reserved. First Edition.</p>
+    
+  </div>
+</footer>
+
+<script>
+// ===== GUARD LUCIDE =====
+if (typeof lucide !== "undefined" && typeof lucide.createIcons === "function") {
+  lucide.createIcons();
+}
+
+// ===== MOBILE MENU =====
+const mobileBtn = document.getElementById('mobile-menu-btn-a3f1');
+const mobileMenu = document.getElementById('mobile-menu-r4t7');
+const mobileClose = document.getElementById('mobile-menu-close-b2c8');
+if (mobileBtn && mobileMenu && mobileClose) {
+  mobileBtn.addEventListener('click', () => mobileMenu.classList.remove('hidden'));
+  mobileClose.addEventListener('click', () => mobileMenu.classList.add('hidden'));
+  document.querySelectorAll('.mobile-nav-link').forEach(link => {
+    link.addEventListener('click', () => mobileMenu.classList.add('hidden'));
+  });
+}
+
+// ===== PARTICLE CANVAS =====
+(function() {
+  const canvas = document.getElementById('hero-canvas-p1q9');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  let w, h, particles = [];
+  const PARTICLE_COUNT = 80;
+  const MAX_DIST = 120;
+
+  function resize() {
+    const section = canvas.parentElement;
+    w = canvas.width = section.offsetWidth;
+    h = canvas.height = section.offsetHeight;
+  }
+
+  function initParticles() {
+    particles = [];
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+      particles.push({
+        x: Math.random() * w,
+        y: Math.random() * h,
+        vx: (Math.random() - 0.5) * 0.5,
+        vy: (Math.random() - 0.5) * 0.5,
+        r: Math.random() * 1.5 + 0.5
+      });
+    }
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, w, h);
+    for (let i = 0; i < particles.length; i++) {
+      const p = particles[i];
+      p.x += p.vx;
+      p.y += p.vy;
+      if (p.x < 0) p.x = w;
+      if (p.x > w) p.x = 0;
+      if (p.y < 0) p.y = h;
+      if (p.y > h) p.y = 0;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(0,255,136,0.4)';
+      ctx.fill();
+      for (let j = i + 1; j < particles.length; j++) {
+        const p2 = particles[j];
+        const dx = p.x - p2.x;
+        const dy = p.y - p2.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < MAX_DIST) {
+          ctx.beginPath();
+          ctx.moveTo(p.x, p.y);
+          ctx.lineTo(p2.x, p2.y);
+          ctx.strokeStyle = `rgba(0,255,136,${0.12 * (1 - dist / MAX_DIST)})`;
+          ctx.lineWidth = 0.5;
+          ctx.stroke();
+        }
+      }
+    }
+    requestAnimationFrame(draw);
+  }
+
+  resize();
+  initParticles();
+  draw();
+  window.addEventListener('resize', () => { resize(); initParticles(); });
+})();
+
+// ===== CHAPTERS GRID =====
+(function() {
+  const chapters = [
+    { num: 1, title: "Understanding Scope", icon: "shield", desc: "Defines which systems, applications, and techniques are authorized. Your operational contract as a researcher." },
+    { num: 2, title: "Report Writing", icon: "file-text", desc: "Engineering reproducible, actionable bug reports. A self-contained artefact that lets teams reproduce, validate, and fix." },
+    { num: 3, title: "Program Models", icon: "git-branch", desc: "Public, private, hybrid, and specialized programs. Strategic alignment between hunter and platform." },
+    { num: 4, title: "Core Definitions", icon: "book-open", desc: "Authorization, safe harbor, scope creep, coordinated disclosure, proof of concept — the vocabulary of responsible research." },
+    { num: 5, title: "Legal & Ethics", icon: "scale", desc: "CFAA, GDPR, DMCA, HIPAA. Navigating the global legal patchwork with the CIA Triad as your ethical compass." },
+    { num: 6, title: "Tools & Automation", icon: "terminal", desc: "Kali Linux, Burp Suite, Nmap and 600+ tools. Reconnaissance, scanning, exploitation workflows." },
+    { num: 7, title: "Web App & API Testing", icon: "globe", desc: "Web applications and APIs sit at the center of modern digital services. Core testing methodology." },
+    { num: 8, title: "The Human Element", icon: "users", desc: "Social engineering, insider threats, and organizational culture. The human attack surface." },
+    { num: 9, title: "OPSEC", icon: "eye", desc: "Operational security maps to the bug bounty workflow. Protecting methods and ethical obligations." },
+    { num: 10, title: "Monetization", icon: "dollar-sign", desc: "Bounty structures, payout tiers, professional pathways, and community development." },
+    { num: 11, title: "CTF & Live Hacking", icon: "zap", desc: "Live hacking events, CTF competitions, and skill development ecosystems." },
+    { num: 12, title: "AI in Bug Bounty", icon: "cpu", desc: "Machine learning applications in vulnerability research and automation." },
+    { num: 13, title: "Platform Comparison", icon: "bar-chart-2", desc: "HackerOne, Bugcrowd, Intigriti, YesWeHack — strategic platform selection." },
+    { num: 14, title: "Bug Hunting Discipline", icon: "target", desc: "Bug hunting as a modern security discipline and professional ecosystem." }
+  ];
+
+  const grid = document.getElementById('chapters-grid-w2x5');
+  if (!grid) return;
+
+  chapters.forEach(ch => {
+    const card = document.createElement('div');
+    card.className = 'glass-card p-5 cursor-default';
+    card.innerHTML = `
+      <div class="flex items-start justify-between mb-3">
+        <span class="chapter-badge font-mono text-xs font-bold px-2.5 py-1 rounded-md" style="background:rgba(0,255,136,0.12);color:#00ff88;border:1px solid rgba(0,255,136,0.2)">${String(ch.num).padStart(2,'0')}</span>
+        <i data-lucide="${ch.icon}" class="w-5 h-5" style="color:#7a8499"></i>
+      </div>
+      <h3 class="font-semibold text-sm mb-2" style="color:#e8eaf0">${ch.title}</h3>
+      <p class="text-xs leading-relaxed" style="color:#7a8499">${ch.desc}</p>
+    `;
+    grid.appendChild(card);
+  });
+
+  // Re-render Lucide icons for dynamic content
+  if (typeof lucide !== "undefined" && typeof lucide.createIcons === "function") {
+    lucide.createIcons();
+  }
+})();
+
+// ===== TERMINAL SIMULATION =====
+(function() {
+  const output = document.getElementById('terminal-output-v6w2');
+  const inputArea = document.getElementById('terminal-input-area-z3a5');
+  const inputEl = document.getElementById('terminal-input-d7e9');
+  if (!output || !inputArea || !inputEl) return;
+
+  const sequence = [
+    {
+      cmd: 'whoami',
+      out: 'marcus-perez — cybersecurity researcher & author'
+    },
+    {
+      cmd: 'cat book_info.txt',
+      out: `Title: The Guide to the Fundamentals of Bug Bounty Hunting
+Author: Marcus Perez
+Edition: First (May 2026)
+Chapters: 14
+Topics: Scope, Reporting, Legal, Tools, AI, OPSEC`
+    },
+    {
+      cmd: 'nmap -sV target.example.com',
+      out: `Starting Nmap scan...
+PORT     STATE  SERVICE   VERSION
+80/tcp   open   http      nginx 1.25.3
+443/tcp  open   https     nginx 1.25.3
+22/tcp   open   ssh       OpenSSH 8.9`
+    },
+    {
+      cmd: 'python3 recon.py --target example.com',
+      out: `[*] Starting reconnaissance...
+[+] Subdomains found: api.example.com, admin.example.com, dev.example.com
+[+] Technologies detected: React, Node.js, PostgreSQL
+[!] Potential endpoint exposed: /api/v1/users`
+    },
+    {
+      cmd: 'burpsuite --scan --scope api.example.com',
+      out: `[SCAN STARTED] Target: api.example.com
+[FOUND] SQL Injection - /api/v1/search?q= (HIGH)
+[FOUND] IDOR - /api/v1/users/{id} (CRITICAL)
+[INFO] Report saved to: report_2026_06_20.pdf`
+    }
+  ];
+
+  const helpResponse = {
+    help:   `Available commands:
+  help        Show this help message
+  scope       Scope definition from the book
+  report      Report writing tips
+  tools       List essential tools
+  platforms   Bug bounty platforms
+  clear       Clear terminal`,
+    scope:  `[SCOPE DEFINITION]
+Scope defines the boundaries of authorized testing.
+It specifies which systems, applications, domains,
+and techniques a researcher may target. Operating
+outside scope can have legal consequences and
+violates responsible disclosure principles.`,
+    report: `[REPORT WRITING TIPS]
+1. Clear title with severity rating
+2. Step-by-step reproduction instructions
+3. Include affected endpoint/parameter
+4. Attach proof-of-concept (screenshots, code)
+5. Describe business impact
+6. Suggest remediation approach`,
+    tools:  `[ESSENTIAL TOOLS]
+• Kali Linux    — Security-focused OS (600+ tools)
+• Burp Suite    — Web app security testing
+• Nmap          — Network discovery & scanning
+• ffuf          — Web fuzzing
+• Nuclei        — Vulnerability scanner
+• Amass         — Subdomain enumeration
+• SQLmap        — SQL injection automation
+• Metasploit    — Exploitation framework`,
+    platforms: `[BUG BOUNTY PLATFORMS]
+• HackerOne     — Largest public platform
+• Bugcrowd      — Crowdsourced security
+• Intigriti     — European leader
+• YesWeHack     — Global reach
+• Synack        — Private, vetted
+• Immunefi      — Web3 / blockchain`
+  };
+
+  function createPromptLine() {
+    const line = document.createElement('div');
+    line.className = 'flex items-start gap-2';
+    const prompt = document.createElement('span');
+    prompt.style.color = '#00ff88';
+    prompt.style.whiteSpace = 'nowrap';
+    prompt.textContent = 'marcus@bugbounty:~$ ';
+    const cmdSpan = document.createElement('span');
+    cmdSpan.style.color = '#e8eaf0';
+    line.appendChild(prompt);
+    line.appendChild(cmdSpan);
+    output.appendChild(line);
+    return cmdSpan;
+  }
+
+  function createOutputBlock(text) {
+    const block = document.createElement('div');
+    block.className = 'mb-4 whitespace-pre-wrap';
+    block.style.color = '#b0b8c8';
+    // Colorize special outputs
+    const colored = text
+      .replace(/^(\[FOUND\].*CRITICAL.*)/gm, '<span style="color:#ff4466">$1</span>')
+      .replace(/^(\[FOUND\].*HIGH.*)/gm, '<span style="color:#ff8800">$1</span>')
+      .replace(/^(\[\*\].*)/gm, '<span style="color:#00c8ff">$1</span>')
+      .replace(/^(\[\+\].*)/gm, '<span style="color:#00ff88">$1</span>')
+      .replace(/^(\[!\].*)/gm, '<span style="color:#ffcc00">$1</span>')
+      .replace(/^(\[SCAN STARTED\].*)/gm, '<span style="color:#00c8ff">$1</span>')
+      .replace(/^(\[INFO\].*)/gm, '<span style="color:#7a8499">$1</span>')
+      .replace(/(open)/g, '<span style="color:#00ff88">$1</span>');
+    block.innerHTML = colored;
+    output.appendChild(block);
+  }
+
+  async function typeText(el, text, minDelay, maxDelay) {
+    for (let i = 0; i < text.length; i++) {
+      el.textContent += text[i];
+      await new Promise(r => setTimeout(r, minDelay + Math.random() * (maxDelay - minDelay)));
+    }
+  }
+
+  async function runSequence() {
+    for (const step of sequence) {
+      const cmdSpan = createPromptLine();
+      await typeText(cmdSpan, step.cmd, 30, 80);
+      await new Promise(r => setTimeout(r, 400));
+      createOutputBlock(step.out);
+      output.scrollTop = output.scrollHeight;
+      await new Promise(r => setTimeout(r, 600));
+    }
+    // Show interactive input
+    inputArea.classList.remove('hidden');
+    inputEl.focus();
+  }
+
+  // Handle user input
+  inputEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      const val = inputEl.value.trim().toLowerCase();
+      inputEl.value = '';
+      if (!val) return;
+
+      const cmdSpan = createPromptLine();
+      cmdSpan.textContent = val;
+
+      if (val === 'clear') {
+        output.innerHTML = '';
+        return;
+      }
+
+      if (helpResponse[val]) {
+        createOutputBlock(helpResponse[val]);
+      } else {
+        createOutputBlock(`Command not recognized: '${val}'. Type 'help' for available commands.`);
+      }
+      output.scrollTop = output.scrollHeight;
+    }
+  });
+
+  // Start sequence when terminal is visible
+  const termSection = document.getElementById('terminal');
+  let sequenceStarted = false;
+  const termObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting && !sequenceStarted) {
+        sequenceStarted = true;
+        setTimeout(runSequence, 500);
+        termObserver.disconnect();
+      }
+    });
+  }, { threshold: 0.3 });
+  if (termSection) termObserver.observe(termSection);
+})();
+
+// ===== SCROLL REVEAL =====
+(function() {
+  const reveals = document.querySelectorAll('.section-reveal');
+  const revealObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('visible');
+      }
+    });
+  }, { threshold: 0.1, rootMargin: '0px 0px -50px 0px' });
+  reveals.forEach(el => revealObserver.observe(el));
+})();
+
+// ===== BAR ANIMATION =====
+(function() {
+  const barsContainer = document.getElementById('bars-container-j5k8');
+  if (!barsContainer) return;
+  let barsAnimated = false;
+  const barObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting && !barsAnimated) {
+        barsAnimated = true;
+        const bars = barsContainer.querySelectorAll('.bar-row > div:last-child > div');
+        bars.forEach((bar, i) => {
+          setTimeout(() => {
+            bar.classList.add('bar-animated');
+          }, i * 200);
+        });
+        barObserver.disconnect();
+      }
+    });
+  }, { threshold: 0.3 });
+  barObserver.observe(barsContainer);
+})();
+
+// ===== ACTIVE NAV HIGHLIGHT =====
+(function() {
+  const sections = ['about', 'chapters', 'tools', 'terminal'];
+  const navLinks = document.querySelectorAll('[data-nav]');
+
+  function updateActive() {
+    let current = '';
+    sections.forEach(id => {
+      const section = document.getElementById(id);
+      if (section) {
+        const rect = section.getBoundingClientRect();
+        if (rect.top <= 120) current = id;
+      }
+    });
+    navLinks.forEach(link => {
+      if (link.dataset.nav === current) {
+        link.classList.add('active');
+        link.style.color = '#e8eaf0';
+      } else {
+        link.classList.remove('active');
+        link.style.color = '#7a8499';
+      }
+    });
+  }
+  window.addEventListener('scroll', updateActive, { passive: true });
+})();
+
+// ===== NAVBAR BG ON SCROLL =====
+(function() {
+  const nav = document.getElementById('navbar-x9k2');
+  if (!nav) return;
+  window.addEventListener('scroll', () => {
+    if (window.scrollY > 60) {
+      nav.style.borderBottomColor = 'rgba(0,255,136,0.15)';
+      nav.style.background = 'rgba(5,8,16,0.95)';
+    } else {
+      nav.style.borderBottomColor = 'rgba(0,255,136,0.1)';
+      nav.style.background = 'rgba(5,8,16,0.85)';
+    }
+  }, { passive: true });
+})();
+</script>
+</body>
+</html>
